@@ -1,0 +1,23 @@
+# fly.toml — Slopius web app (Next.js UI + bot engine)
+# Deploy: fly deploy
+app = "slopius-web"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+# Persistent volume for SQLite database
+[[mounts]]
+  source = "slopius_db"
+  destination = "/app/db"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

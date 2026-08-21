@@ -1,0 +1,18 @@
+# Production Caddyfile — single domain, routes /socket.io to relay, rest to web.
+# Replace :80 with your domain (e.g., slopius.example.com) for HTTPS auto-cert.
+{
+	auto_https off
+}
+
+:80 {
+	# Socket.io → bot-relay (3003)
+	@socketio path /socket.io/*
+	handle @socketio {
+		reverse_proxy relay:3003
+	}
+
+	# Everything else → Next.js (3000)
+	handle {
+		reverse_proxy web:3000
+	}
+}

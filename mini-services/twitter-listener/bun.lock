@@ -1,0 +1,15 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "twitter-listener",
+      "dependencies": {
+        "twitter-api-v2": "^1.29.1",
+      },
+    },
+  },
+  "packages": {
+    "twitter-api-v2": ["twitter-api-v2@1.29.1", "", {}, "sha512-l5U8aP6woe+gv0RViz/YA0YEG/NRtqkO1iXWqxNfrn3MSc2V85u6w44oNDBWhy8zVV9r36SJv/uXNmnfni8Uxw=="],
+  }
+}

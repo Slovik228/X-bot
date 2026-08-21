@@ -1,0 +1,19 @@
+# fly.toml — bot-relay (socket.io real-time relay)
+app = "slopius-relay"
+primary_region = "iad"
+
+[build]
+  dockerfile = "mini-services/bot-relay/Dockerfile"
+
+[http_service]
+  internal_port = 3003
+  force_https = true
+  auto_stop_machines = false
+  min_machines_running = 1
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+
+[env]
+  SOCKET_PATH = "/socket.io/"

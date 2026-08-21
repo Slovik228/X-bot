@@ -1,0 +1,75 @@
+// Multi-Model AI X Bot — Prisma schema
+// learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// A simulated X (Twitter) account. Includes the bot itself (handle = "aixbot").
+model XUser {
+  id          String   @id @default(cuid())
+  handle      String   @unique // without @, e.g. "aixbot", "satoshi"
+  name        String
+  avatarColor String   @default("#6366f1") // tailwind-ish hex used for avatar gradient
+  bio         String   @default("")
+  isBot       Boolean  @default(false)
+  isVerified  Boolean  @default(false)
+  twitterUid  String?  @unique // Twitter numeric user id (for real-X ingested users)
+  createdAt   DateTime @default(now())
+
+  tweets      Tweet[]
+  preferences UserPref?
+}
+
+// A tweet in the simulated X timeline.
+// Bot replies are also Tweets with isBot=true.
+// Thread chunks from one bot response share the same botRunId and are ordered by threadIndex.
+model Tweet {
+  id            String   @id @default(cuid())
+  xid           String   @unique @default(cuid()) // twitter-style numeric-ish id (we use cuid for uniqueness)
+  authorId      String
+  author        XUser    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content       String   @default("")
+  imageUrl      String?
+
+  // threading / context
+  parentId      String?  // direct reply target (null = top-level tweet)
+  parent        Tweet?   @relation("TweetReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies       Tweet[]  @relation("TweetReplies")
+  quotedId      String?  // quoted tweet (null = none)
+  quoted        Tweet?   @relation("TweetQuotes", fields: [quotedId], references: [id], onDelete: SetNull)
+  quotedBy      Tweet[]  @relation("TweetQuotes")
+
+  // bot metadata
+  isBot         Boolean  @default(false)
+  botModel      String?  // e.g. "claude", "gpt", "gemini", "grok", "deepseek", "auto"
+  botCommand    String?  // e.g. "summarize", "search", "compare", "research", "code", "analyze", "translate", null
+  botRunId      String?  // groups the chunks of a single bot response
+  threadIndex   Int      @default(0)  // 0-based index within a bot run
+  threadTotal   Int      @default(1)  // total chunks in this bot run
+  sources       String?  // JSON string of web-search sources [{title,url,host}], used by /search /research
+  mentionTarget String?  // for user tweets: which handle was mentioned (e.g. "aixbot"); null if none
+  twitterId     String?  @unique // real Twitter tweet id (for dedup of ingested mentions + posted replies)
+
+  createdAt     DateTime @default(now())
+
+  @@index([parentId])
+  @@index([quotedId])
+  @@index([botRunId])
+  @@index([authorId])
+}
+
+// Per-user default model preference (remembered after they use /claude once, etc.)
+model UserPref {
+  id           String   @id @default(cuid())
+  handle       String   @unique
+  defaultModel String   @default("auto") // model id, or "auto"
+  defaultAction String? // optional default action
+  user         XUser?   @relation(fields: [handle], references: [handle], onDelete: Cascade)
+  updatedAt    DateTime @updatedAt
+}

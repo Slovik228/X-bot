@@ -1,0 +1,45 @@
+# docker-compose.yml — runs all 3 services + Caddy reverse proxy on ONE host.
+# Usage: docker compose up -d --build
+# Then: http://YOUR_HOST  (Caddy routes /socket.io → relay, everything else → web)
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.prod:/etc/caddy/Caddyfile
+      - caddy_data:/data
+    depends_on:
+      - web
+      - relay
+    restart: unless-stopped
+
+  web:
+    build: .
+    env_file: .env
+    environment:
+      - DATABASE_URL=file:/app/db/custom.db
+      - BOT_RELAY_URL=http://relay:3003/internal/broadcast
+      - NEXT_PUBLIC_SOCKET_URL=/
+    volumes:
+      - bot_db:/app/db
+    restart: unless-stopped
+
+  relay:
+    build: ./mini-services/bot-relay
+    environment:
+      - SOCKET_PATH=/socket.io/
+    restart: unless-stopped
+
+  listener:
+    build: ./mini-services/twitter-listener
+    env_file: .env
+    environment:
+      - NEXT_APP_URL=http://web:3000
+    restart: unless-stopped
+
+volumes:
+  bot_db:
+  caddy_data:

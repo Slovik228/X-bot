@@ -1,0 +1,41 @@
+# Render Blueprint — one-click deploy to Render (free web service).
+# Docs: https://render.com/docs/blueprints
+#
+# After deploying:
+#   - Set the TWITTER_* env vars in the Render dashboard (or via `render env`).
+#   - Attach a free persistent disk to /app/db (so SQLite survives redeploys).
+#   - (Optional) Use UptimeRobot to ping the URL every 5 min to prevent the
+#     free-tier sleep (free services sleep after 15 min of no traffic).
+
+services:
+  - type: web
+    name: slopius-bot
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/twitter/status
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_SOCKET_URL
+        value: /
+      - key: TWITTER_BOT_HANDLE
+        sync: false
+      - key: TWITTER_API_KEY
+        sync: false
+      - key: TWITTER_API_KEY_SECRET
+        sync: false
+      - key: TWITTER_BEARER_TOKEN
+        sync: false
+      - key: TWITTER_ACCESS_TOKEN
+        sync: false
+      - key: TWITTER_ACCESS_TOKEN_SECRET
+        sync: false
+      - key: TWITTER_INTERNAL_SECRET
+        sync: false
+    disk:
+      - name: slopius-data
+        mountPath: /app/db
+        sizeGB: 1

@@ -1,0 +1,11 @@
+{
+  "name": "twitter-listener",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "bun --hot index.ts",
+    "start": "bun index.ts"
+  },
+  "dependencies": {
+    "twitter-api-v2": "^1.29.1"
+  }
+}

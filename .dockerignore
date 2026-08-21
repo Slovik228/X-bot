@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+*.log
+dev.log
+server.log
+bot-relay.log
+twitter-listener.log
+shot-*.png
+test-chart.png
+upload
+download
+mini-services/*/node_modules
+mini-services/*/.last-mention-id
+.DS_Store

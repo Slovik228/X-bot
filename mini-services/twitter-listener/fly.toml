@@ -1,0 +1,11 @@
+# fly.toml — twitter-listener (polls X for mentions, no public port needed)
+app = "slopius-listener"
+primary_region = "iad"
+
+[build]
+  dockerfile = "mini-services/twitter-listener/Dockerfile"
+
+# No http_service — this is a background worker, not a web server.
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
