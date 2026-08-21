@@ -8,9 +8,27 @@ primary_region = "iad"
   dockerfile = "mini-services/twitter-listener/Dockerfile"
 
 # No http_service — this is a background worker, not a web server.
+# But we DO need it to stay running 24/7 (not auto-stop).
 [[vm]]
   size = "shared-cpu-1x"
   memory = "256mb"
 
 [env]
   NEXT_APP_URL = "https://slopius-web.fly.dev"
+
+# Keep the listener running 24/7 — never auto-stop.
+# (Without this, Fly may stop a worker that has no HTTP service.)
+[processes]
+  app = "bun index.ts"
+
+[[services]]
+  internal_port = 3004
+  protocol = "tcp"
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 25
+    soft_limit = 20
