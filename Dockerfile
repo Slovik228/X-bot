@@ -10,6 +10,8 @@ FROM oven/bun:1 AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Explicitly copy .env (in case it was excluded by .dockerignore cache or git state).
+COPY .env ./.env
 # Load .env into the build environment so NEXT_PUBLIC_* vars get baked into the
 # client bundle at build time (Next.js inlines NEXT_PUBLIC_* during `next build`).
 RUN set -a && . .env && set +a && bunx prisma generate && bun run build
