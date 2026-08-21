@@ -25,14 +25,16 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-c
 RUN mkdir -p /app/db
 # Prisma CLI for DB init on first boot
 RUN bun add -g prisma
+# Copy standalone Next.js output FIRST (this is the app).
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
-# Real .env (committed to repo per user request — contains live Twitter keys).
-# Loaded into env by start-web.sh at runtime.
+# Copy .env (committed to repo — contains live Twitter keys).
 COPY --from=builder /app/.env ./.env
-COPY start-web.sh ./
+# Copy start script AFTER standalone (so it's not overwritten).
+COPY start-web.sh ./start-web.sh
 RUN chmod +x start-web.sh
 EXPOSE 3000
-CMD ["./start-web.sh"]
+# Use absolute path to be safe.
+CMD ["/bin/sh", "/app/start-web.sh"]
