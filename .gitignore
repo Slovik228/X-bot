@@ -33,10 +33,13 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# ---- SECRETS — NEVER commit these ----
-.env
-.env.*
-!.env.example
+# ---- SECRETS ----
+# NOTE: .env IS committed (user explicitly wants Fly to auto-deploy from repo).
+# This exposes real Twitter API keys publicly — user accepts this risk and will
+# make the repo private after testing.
+# .env
+# .env.*
+# !.env.example
 
 # vercel
 .vercel

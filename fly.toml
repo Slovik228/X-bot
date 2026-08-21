@@ -1,5 +1,5 @@
 # fly.toml — Slopius web app (Next.js UI + bot engine)
-# Deploy: fly deploy
+# Deploy: fly deploy --app slopius-web --dockerfile Dockerfile --build-context .
 app = "slopius-web"
 primary_region = "iad"
 

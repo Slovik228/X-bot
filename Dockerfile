@@ -27,6 +27,9 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
+# Real .env (committed to repo per user request — contains live Twitter keys).
+# Loaded into env by start-web.sh at runtime.
+COPY --from=builder /app/.env ./.env
 COPY start-web.sh ./
 RUN chmod +x start-web.sh
 EXPOSE 3000

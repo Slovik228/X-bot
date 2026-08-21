@@ -1,4 +1,5 @@
 # fly.toml — bot-relay (socket.io real-time relay)
+# Deploy from project root: fly deploy --app slopius-relay --dockerfile mini-services/bot-relay/Dockerfile
 app = "slopius-relay"
 primary_region = "iad"
 
