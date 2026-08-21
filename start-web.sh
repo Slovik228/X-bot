@@ -14,14 +14,14 @@ else
 fi
 
 echo "[startup] working dir: $(pwd)"
-echo "[startup] node: $(node --version 2>&1)"
+echo "[startup] node: $(node -v 2>&1)"
 echo "[startup] server.js exists: $([ -f /app/server.js ] && echo yes || echo no)"
 echo "[startup] .next/static exists: $([ -d /app/.next/static ] && echo yes || echo no)"
 echo "[startup] prisma schema exists: $([ -f /app/prisma/schema.prisma ] && echo yes || echo no)"
 
 if [ ! -f /app/db/custom.db ]; then
   echo "[startup] DB file not found - running prisma db push..."
-  DATABASE_URL="file:/app/db/custom.db" bunx prisma db push --accept-data-loss --skip-generate 2>&1 || {
+  DATABASE_URL="file:/app/db/custom.db" bunx prisma db push --accept-data-loss 2>&1 || {
     echo "[startup] WARNING: prisma db push failed - continuing anyway"
   }
   echo "[startup] DB init step done."
