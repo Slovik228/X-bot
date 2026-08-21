@@ -17,6 +17,11 @@ ENV NEXT_PUBLIC_BOT_HANDLE=Slopius
 RUN bunx prisma generate && bun run build
 RUN mkdir -p .next/standalone/node_modules/@prisma && \
     cp -r node_modules/@prisma/client .next/standalone/node_modules/@prisma/ 2>/dev/null || true
+# Pre-create the SQLite database at BUILD time (prisma + schema are all present here).
+# This DB file is a TEMPLATE — at runtime, if the volume has no DB, we copy this one.
+RUN DATABASE_URL="file:/app/db/custom.db" bunx prisma db push --accept-data-loss --skip-generate 2>/dev/null || \
+    DATABASE_URL="file:/app/db/custom.db" bunx prisma db push --accept-data-loss 2>/dev/null || true
+RUN test -f /app/db/custom.db && echo "DB template created at build time" || echo "WARNING: DB template not created"
 
 FROM oven/bun:1-slim AS runner
 WORKDIR /app
@@ -35,6 +40,9 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
+# Copy the pre-built SQLite DB template (created at build time).
+# At runtime, start-web.sh copies this to /app/db/custom.db if the volume is empty.
+COPY --from=builder /app/db/custom.db /app/db/custom.db.template
 # Copy .env (committed to repo — contains live Twitter keys).
 COPY --from=builder /app/.env ./.env
 # Copy start script AFTER standalone (so it's not overwritten).
