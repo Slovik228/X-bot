@@ -38,5 +38,5 @@ COPY --from=builder /app/.env ./.env
 COPY start-web.sh ./start-web.sh
 RUN chmod +x start-web.sh
 EXPOSE 3000
-# Use absolute path to be safe.
-CMD ["/bin/sh", "/app/start-web.sh"]
+# Use bash (not /bin/sh) — start-web.sh uses bash syntax that dash rejects.
+CMD ["/bin/bash", "/app/start-web.sh"]
