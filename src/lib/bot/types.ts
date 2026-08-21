@@ -93,6 +93,8 @@ export interface BotRunResult {
 }
 
 // Bot handle: read from env (real X handle) or default to 'aixbot' (local sim).
+// NOTE: This is a SERVER-side constant. The frontend gets the real handle from
+// /api/twitter/status (botHandle field) and /api/seed, so it shows "@Slopius" correctly.
 export const BOT_HANDLE = (process.env.TWITTER_BOT_HANDLE || 'aixbot').trim().replace(/^@/, '');
 export const BOT_NAME = 'AI X Bot';
 export const MAX_TWEET_CHARS = 270;

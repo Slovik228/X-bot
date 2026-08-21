@@ -14,7 +14,7 @@ import {
   type CommandInfo,
   type RateLimits,
 } from '@/lib/x-client';
-import { insertCommand } from '@/lib/compose-utils';
+import { insertCommand, BOT_MENTION } from '@/lib/compose-utils';
 import { toast } from 'sonner';
 import { Bot, RefreshCw, Wifi, WifiOff, Twitter, Radio } from 'lucide-react';
 
@@ -183,8 +183,7 @@ export default function Page() {
   const handleReply = useCallback((t: Tweet) => {
     setReplyTo(t);
     setQuoteTo(null);
-    const botHandle = process.env.NEXT_PUBLIC_BOT_HANDLE || 'aixbot';
-    setComposeText((cur) => (new RegExp(`@${botHandle}\\b`, 'i').test(cur) ? cur : `@${botHandle} `));
+    setComposeText((cur) => (new RegExp(`@${BOT_MENTION.slice(1)}\\b`, 'i').test(cur) ? cur : `${BOT_MENTION} `));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
@@ -339,7 +338,7 @@ export default function Page() {
             <Avatar name="AI X Bot" color="#6366f1" isBot size={20} />
             <span>
               <b className="text-neutral-400">AI X Bot</b> — X-native gateway to multiple AI models. Mention{' '}
-              <code className="text-neutral-400">@aixbot</code> with a command.
+              <code className="text-neutral-400">{BOT_MENTION}</code> with a command.
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -366,7 +365,7 @@ function EmptyState({ onInsert }: { onInsert: (cmd: string) => void }) {
       <div>
         <h2 className="text-lg font-bold text-neutral-100">No tweets yet</h2>
         <p className="mt-1 max-w-sm text-sm text-neutral-500">
-          Compose a tweet mentioning <code className="text-sky-400">@aixbot</code> to ask the bot. Try a command:
+          Compose a tweet mentioning <code className="text-sky-400">{BOT_MENTION}</code> to ask the bot. Try a command:
         </p>
       </div>
       <div className="flex flex-wrap justify-center gap-2">

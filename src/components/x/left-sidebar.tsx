@@ -3,6 +3,7 @@
 import { Avatar } from './avatar';
 import { ModelBadge } from './model-badge';
 import type { ModelInfo, CommandInfo } from '@/lib/x-client';
+import { BOT_MENTION } from '@/lib/compose-utils';
 import { CheckCircle2, Zap, Eye, Code2, Search, Brain } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -28,7 +29,7 @@ export function LeftSidebar({
             <span className="truncate font-bold text-neutral-50">AI X Bot</span>
             <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-sky-500" fill="currentColor" />
           </div>
-          <div className="truncate text-xs text-neutral-500">@aixbot</div>
+          <div className="truncate text-xs text-neutral-500">{BOT_MENTION}</div>
         </div>
       </div>
 
@@ -79,7 +80,7 @@ export function LeftSidebar({
       </div>
 
       <div className="border-t border-neutral-800 p-3 text-[10px] leading-relaxed text-neutral-600">
-        Mention <span className="text-neutral-400">@aixbot</span> with a command + question. The bot
+        Mention <span className="text-neutral-400">{BOT_MENTION}</span> with a command + question. The bot
         replies in-thread. Powered by local models (simulated providers).
       </div>
     </aside>

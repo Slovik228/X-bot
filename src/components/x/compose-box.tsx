@@ -6,7 +6,7 @@ import { api, type Tweet } from '@/lib/x-client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
-import { insertCommand, ensureMention, MAX_COMPOSE } from '@/lib/compose-utils';
+import { insertCommand, ensureMention, MAX_COMPOSE, BOT_MENTION } from '@/lib/compose-utils';
 import { ImagePlus, X, Sparkles, CornerUpLeft, Quote } from 'lucide-react';
 
 const QUICK_MODELS = ['claude', 'gpt', 'gemini', 'grok', 'deepseek', 'auto'];
@@ -155,7 +155,7 @@ export function ComposeBox({
               onClick={() => onTextChange(ensureMention(text.trimStart()))}
               className="ml-auto inline-flex items-center gap-1 rounded-full border border-neutral-700 px-2 py-0.5 text-[11px] text-neutral-300 hover:bg-neutral-800"
             >
-              <Sparkles className="h-3 w-3" /> @aixbot
+              <Sparkles className="h-3 w-3" /> {BOT_MENTION}
             </button>
           </div>
 
@@ -163,7 +163,7 @@ export function ComposeBox({
             ref={taRef}
             value={text}
             onChange={(e) => onTextChange(e.target.value)}
-            placeholder={`Mention @aixbot to ask the bot...\ne.g. @aixbot /claude what's wrong with this tokenomics?`}
+            placeholder={`Mention ${BOT_MENTION} to ask the bot...\ne.g. ${BOT_MENTION} /claude what's wrong with this tokenomics?`}
             className="min-h-[88px] resize-none border-0 bg-transparent p-0 text-[15px] text-neutral-100 placeholder:text-neutral-600 focus-visible:ring-0"
           />
 

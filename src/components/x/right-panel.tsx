@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Avatar } from './avatar';
 import type { Account } from './compose-box';
 import type { ModelInfo, RateLimits } from '@/lib/x-client';
+import { BOT_MENTION } from '@/lib/compose-utils';
 import { cn } from '@/lib/utils';
 import { Wifi, WifiOff, Activity, Gauge, Twitter, Link2, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 
@@ -108,16 +109,16 @@ export function RightPanel({
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">Try these</h3>
         <div className="space-y-1">
           {[
-            '@aixbot /claude explain stablecoins',
-            '@aixbot /grok what happened in crypto today?',
-            '@aixbot /compare why is BTC dropping?',
-            '@aixbot /research AI agent market',
-            '@aixbot /search ETH gas fees now',
-            '@aixbot /code debounce in ts',
+          `${BOT_MENTION} /claude explain stablecoins`,
+            `${BOT_MENTION} /grok what happened in crypto today?`,
+            `${BOT_MENTION} /compare why is BTC dropping?`,
+            `${BOT_MENTION} /research AI agent market`,
+            `${BOT_MENTION} /search ETH gas fees now`,
+            `${BOT_MENTION} /code debounce in ts`,
           ].map((ex) => (
             <button
               key={ex}
-              onClick={() => onInsertCommand(ex.replace(/^@aixbot \//, '').split(' ')[0])}
+              onClick={() => onInsertCommand(ex.replace(/^@\S+ \//, '').split(' ')[0])}
               className="block w-full truncate rounded-md px-2 py-1 text-left text-[11px] text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"
               title={ex}
             >
