@@ -1,5 +1,6 @@
 # fly.toml — twitter-listener (polls X for mentions, no public port needed)
-# Deploy from project root: fly deploy --app slopius-listener --dockerfile mini-services/twitter-listener/Dockerfile
+# Build context = project root (so Dockerfile can COPY mini-services/twitter-listener/* + root .env).
+# Deploy: fly deploy --app slopius-listener --config fly.listener.toml
 app = "slopius-listener"
 primary_region = "iad"
 
@@ -10,3 +11,6 @@ primary_region = "iad"
 [[vm]]
   size = "shared-cpu-1x"
   memory = "256mb"
+
+[env]
+  NEXT_APP_URL = "https://slopius-web.fly.dev"
