@@ -25,7 +25,7 @@ const ENV_FILE = ['/home/z/my-project/.env', '/app/.env', './.env', '../../.env'
   try { return existsSync(p) } catch { return false }
 }) || '/home/z/my-project/.env'
 // State file: next to the listener (so it survives restarts + is volume-friendly).
-const STATE_FILE = process.env.STATE_FILE || (existsSync('/app') ? '/app/mini-services/twitter-listener/.last-mention-id' : '/home/z/my-project/mini-services/twitter-listener/.last-mention-id')
+const STATE_FILE = process.env.STATE_FILE || '/app/.last-mention-id'
 const MIN_INTERVAL_MS = 15_000          // Twitter rate-limit floor
 const MAX_BACKOFF_MS = 5 * 60 * 1000    // 5 minutes
 const IDLE_LOG_INTERVAL_MS = 5 * 60 * 1000  // throttle "idling" logs

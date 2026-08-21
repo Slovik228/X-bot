@@ -44,6 +44,9 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/db/custom.db /app/custom.db.template
 # Copy .env (committed to repo — contains live Twitter keys).
 COPY --from=builder /app/.env ./.env
+# Copy z-ai-web-dev-sdk config (contains LLM API token). The SDK looks for it
+# in: project root, home dir, or /etc/. We put it in /etc/ so it survives.
+COPY --from=builder /app/.z-ai-config /etc/.z-ai-config
 # Copy start script AFTER standalone (so it's not overwritten).
 COPY start-web.sh ./start-web.sh
 RUN chmod +x start-web.sh
