@@ -1,0 +1,30 @@
+# Auto-detect text files and normalize line endings to LF on commit.
+# CRLF breaks shell scripts in Docker/Linux containers.
+* text=auto eol=lf
+
+# Explicitly force LF for shell scripts (critical for Docker containers).
+*.sh text eol=lf
+*.cjs text eol=lf
+*.mjs text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+Dockerfile text eol=lf
+Dockerfile.* text eol=lf
+*.sh text eol=lf
+start-web.sh text eol=lf
+
+# Binary files — don't touch.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.db binary
+*.sqlite binary
