@@ -21,7 +21,9 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 # Prisma needs openssl + ca-certificates for the engine binary + HTTPS calls.
-RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+# bash is needed because start-web.sh uses bash-specific syntax (set -e works in dash,
+# but other constructs may not).
+RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-certificates bash && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /app/db
 # Prisma CLI for DB init on first boot
 RUN bun add -g prisma

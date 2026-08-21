@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # start-web.sh — load .env, init SQLite DB (if missing), then start Next.js.
 set -e
 
@@ -19,7 +19,6 @@ echo "[startup] node: $(node --version 2>&1)"
 echo "[startup] server.js exists: $([ -f /app/server.js ] && echo yes || echo no)"
 echo "[startup] .next/static exists: $([ -d /app/.next/static ] && echo yes || echo no)"
 echo "[startup] prisma schema exists: $([ -f /app/prisma/schema.prisma ] && echo yes || echo no)"
-echo "[startup] db dir: $(ls -la /app/db 2>&1 | head -3)"
 
 # Init SQLite DB on first boot (persistent volume mount).
 if [ ! -f /app/db/custom.db ]; then
@@ -33,5 +32,4 @@ else
 fi
 
 echo "[startup] starting Next.js server on port ${PORT:-3000}..."
-# Use 'exec' so the process becomes PID 1 and receives SIGTERM for graceful shutdown.
 exec node server.js
