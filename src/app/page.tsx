@@ -183,7 +183,8 @@ export default function Page() {
   const handleReply = useCallback((t: Tweet) => {
     setReplyTo(t);
     setQuoteTo(null);
-    setComposeText((cur) => (/@aixbot\b/i.test(cur) ? cur : `@aixbot `));
+    const botHandle = process.env.NEXT_PUBLIC_BOT_HANDLE || 'aixbot';
+    setComposeText((cur) => (new RegExp(`@${botHandle}\\b`, 'i').test(cur) ? cur : `@${botHandle} `));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
