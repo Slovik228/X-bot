@@ -141,8 +141,8 @@ export const api = {
 
 // ---- Socket singleton ----
 // Sandbox: Caddy routes /?XTransformPort=3003 → bot-relay (path: '/').
-// Production: Caddy/nginx routes /socket.io/* → bot-relay (path: '/socket.io/').
-// Set NEXT_PUBLIC_SOCKET_URL=/ in production → frontend uses same-origin default path.
+// Production: NEXT_PUBLIC_SOCKET_URL points to the relay host; socket.io uses
+// the default path '/socket.io/' (relay's SOCKET_PATH=/socket.io/).
 let _socket: Socket | null = null;
 
 export function getSocket(): Socket {
@@ -157,8 +157,8 @@ export function getSocket(): Socket {
     timeout: 10000,
   };
   if (deployUrl) {
-    // Production: same-origin, default socket.io path (/socket.io/)
-    _socket = io(opts);
+    // Production: connect to the relay host directly (cross-origin, CORS *).
+    _socket = io(deployUrl, opts);
   } else {
     // Sandbox: Caddy XTransformPort pattern, path = '/'
     _socket = io('/?XTransformPort=3003', { ...opts, path: '/' });
