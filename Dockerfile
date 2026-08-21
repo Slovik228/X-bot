@@ -19,9 +19,8 @@ RUN mkdir -p .next/standalone/node_modules/@prisma && \
     cp -r node_modules/@prisma/client .next/standalone/node_modules/@prisma/ 2>/dev/null || true
 # Pre-create the SQLite database at BUILD time (prisma + schema are all present here).
 # This DB file is a TEMPLATE — at runtime, if the volume has no DB, we copy this one.
-RUN DATABASE_URL="file:/app/db/custom.db" bunx prisma db push --accept-data-loss --skip-generate 2>/dev/null || \
-    DATABASE_URL="file:/app/db/custom.db" bunx prisma db push --accept-data-loss 2>/dev/null || true
-RUN test -f /app/db/custom.db && echo "DB template created at build time" || echo "WARNING: DB template not created"
+RUN DATABASE_URL="file:/app/db/custom.db" bunx prisma db push --accept-data-loss
+RUN ls -la /app/db/custom.db && echo "DB template created OK" || (echo "ERROR: DB template NOT created" && exit 1)
 
 FROM oven/bun:1-slim AS runner
 WORKDIR /app
