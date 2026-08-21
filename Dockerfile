@@ -40,9 +40,9 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
-# Copy the pre-built SQLite DB template (created at build time).
-# At runtime, start-web.sh copies this to /app/db/custom.db if the volume is empty.
-COPY --from=builder /app/db/custom.db /app/db/custom.db.template
+# Copy the pre-built SQLite DB template OUTSIDE the volume mount point.
+# (If we put it in /app/db/, the volume mount at /app/db hides it at runtime.)
+COPY --from=builder /app/db/custom.db /app/custom.db.template
 # Copy .env (committed to repo — contains live Twitter keys).
 COPY --from=builder /app/.env ./.env
 # Copy start script AFTER standalone (so it's not overwritten).

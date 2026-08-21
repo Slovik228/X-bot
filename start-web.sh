@@ -18,15 +18,16 @@ echo "[startup] node: $(node -v 2>&1)"
 echo "[startup] server.js exists: $([ -f /app/server.js ] && echo yes || echo no)"
 
 # Init SQLite DB: if the volume doesn't have custom.db, copy the pre-built
-# template (created at Docker build time, with schema already pushed).
-# This is 100x more reliable than running prisma db push at runtime.
+# template (located OUTSIDE the volume mount, at /app/custom.db.template).
+# This avoids the classic Docker issue where a volume mount at /app/db
+# hides the template that was copied there during build.
 if [ ! -f /app/db/custom.db ]; then
   echo "[startup] DB file not found on volume - copying template..."
-  if [ -f /app/db/custom.db.template ]; then
-    cp /app/db/custom.db.template /app/db/custom.db
+  if [ -f /app/custom.db.template ]; then
+    cp /app/custom.db.template /app/db/custom.db
     echo "[startup] DB copied from template."
   else
-    echo "[startup] WARNING: no DB template found - app may crash on DB queries."
+    echo "[startup] WARNING: no DB template found at /app/custom.db.template - app may crash on DB queries."
   fi
 else
   echo "[startup] DB file exists - skipping init."
