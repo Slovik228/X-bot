@@ -10,11 +10,11 @@ FROM oven/bun:1 AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# Explicitly copy .env (in case it was excluded by .dockerignore cache or git state).
-COPY .env ./.env
-# Load .env into the build environment so NEXT_PUBLIC_* vars get baked into the
-# client bundle at build time (Next.js inlines NEXT_PUBLIC_* during `next build`).
-RUN set -a && . .env && set +a && bunx prisma generate && bun run build
+# Set NEXT_PUBLIC_* env vars at BUILD time so Next.js inlines them into the
+# client bundle. (Next.js bakes NEXT_PUBLIC_* during `next build`.)
+ENV NEXT_PUBLIC_SOCKET_URL=https://slopius-relay.fly.dev
+ENV NEXT_PUBLIC_BOT_HANDLE=Slopius
+RUN bunx prisma generate && bun run build
 RUN mkdir -p .next/standalone/node_modules/@prisma && \
     cp -r node_modules/@prisma/client .next/standalone/node_modules/@prisma/ 2>/dev/null || true
 
