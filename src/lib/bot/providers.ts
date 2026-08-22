@@ -46,6 +46,10 @@ async function chatCompletion(
     temperature: opts.temperature ?? 0.6,
     max_completion_tokens: opts.maxTokens ?? 1024,
     top_p: 0.95,
+    // Disable reasoning/thinking mode — we want direct answers, not chain-of-thought.
+    // Qwen3 on Groq outputs its thinking process by default; this hides it.
+    reasoning_effort: 'none',
+    reasoning_format: 'hidden',
   };
 
   const res = await fetch(`${AI_BASE_URL}/chat/completions`, {
