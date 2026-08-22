@@ -4,7 +4,7 @@
 // functions — the rest of the engine stays the same.
 
 import ZAI from 'z-ai-web-dev-sdk';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, writeFileSync } from 'fs';
 import { join, extname } from 'path';
 import type { ModelId, BotSource } from './types';
 import { getModel } from './registry';
@@ -13,7 +13,45 @@ import { buildSystemPrompt } from './personas';
 let _zai: Awaited<ReturnType<typeof ZAI.create>> | null = null;
 
 export async function getZai() {
-  if (!_zai) _zai = await ZAI.create();
+  if (!_zai) {
+    // Ensure z-ai-web-dev-sdk can find its config.
+    // The SDK looks for .z-ai-config in: project root, home dir, /etc/.
+    // In Docker, we COPY it to /etc/.z-ai-config. As a fallback, also write it
+    // from env vars (ZAI_*) if the file is missing.
+    const configPaths = ['/etc/.z-ai-config', './.z-ai-config', join(process.cwd(), '.z-ai-config')];
+    let hasConfig = false;
+    for (const p of configPaths) {
+      try {
+        if (existsSync(p)) {
+          hasConfig = true;
+          break;
+        }
+      } catch {}
+    }
+    if (!hasConfig && process.env.ZAI_TOKEN) {
+      // Build config from env vars and write to /etc/.z-ai-config
+      const config = {
+        baseUrl: process.env.ZAI_BASE_URL || 'https://internal-api.z.ai/v1',
+        apiKey: process.env.ZAI_API_KEY || 'Z.ai',
+        chatId: process.env.ZAI_CHAT_ID,
+        token: process.env.ZAI_TOKEN,
+        userId: process.env.ZAI_USER_ID,
+      };
+      try {
+        writeFileSync('/etc/.z-ai-config', JSON.stringify(config));
+        console.log('[z-ai] config written to /etc/.z-ai-config from env vars');
+      } catch (e) {
+        // /etc might be read-only; try home dir
+        try {
+          writeFileSync(join(process.env.HOME || '/tmp', '.z-ai-config'), JSON.stringify(config));
+          console.log('[z-ai] config written to home dir from env vars');
+        } catch {
+          console.error('[z-ai] could not write config file:', e);
+        }
+      }
+    }
+    _zai = await ZAI.create();
+  }
   return _zai;
 }
 

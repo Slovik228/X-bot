@@ -27,6 +27,13 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+# z-ai-web-dev-sdk config — embed directly as env vars (more reliable than file).
+# These are read by the SDK from process.env if no .z-ai-config file is found.
+ENV ZAI_BASE_URL=https://internal-api.z.ai/v1
+ENV ZAI_API_KEY=Z.ai
+ENV ZAI_CHAT_ID=chat-e8f6e30f-8389-4f49-a454-97732e252694
+ENV ZAI_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMzc2ZmQ3NTctZGU3ZS00YWRjLWI5MzMtMjQ3ZTYxMjlmOTVhIiwiY2hhdF9pZCI6ImNoYXQtZThmNmUzMGYtODM4OS00ZjQ5LWE0NTQtOTc3MzJlMjUyNjk0IiwicGxhdGZvcm0iOiJ6YWkifQ.NjjELVdrnj-MgZVzYMQYIhXBs_MSmvk41kH0atoQdAY
+ENV ZAI_USER_ID=376fd757-de7e-4adc-b933-247e6129f95a
 # Prisma needs openssl + ca-certificates for the engine binary + HTTPS calls.
 # bash is needed because start-web.sh uses bash-specific syntax (set -e works in dash,
 # but other constructs may not).
