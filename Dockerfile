@@ -30,8 +30,8 @@ ENV HOSTNAME=0.0.0.0
 # AI API config (Groq — free, fast, works from any IP).
 # AI_API_KEY MUST be set via Fly secrets.
 ENV AI_BASE_URL=https://api.groq.com/openai/v1
-ENV AI_MODEL=qwen/qwen3.6-27b
-ENV AI_VISION_MODEL=llama-3.2-90b-vision-preview
+ENV AI_MODEL=openai/gpt-oss-120b
+ENV AI_VISION_MODEL=openai/gpt-oss-120b
 # Prisma needs openssl + ca-certificates for the engine binary + HTTPS calls.
 # bash is needed because start-web.sh uses bash-specific syntax (set -e works in dash,
 # but other constructs may not).
