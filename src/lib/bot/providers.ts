@@ -1,59 +1,24 @@
-// Provider adapters. Each "model" is simulated via the LOCAL z-ai-web-dev-sdk
-// (the available local AI service) by injecting that model's personality system
-// prompt. To switch to real provider APIs later, replace the bodies of these
-// functions — the rest of the engine stays the same.
+// Provider adapters — uses any OpenAI-compatible API (Groq, OpenAI, Together, etc.)
+// Groq is the default: free, fast, works from any IP. Get a key at console.groq.com/keys.
+//
+// Each "model" (claude/gpt/gemini/grok/deepseek) is simulated by injecting that
+// model's personality system prompt (from personas.ts). The underlying LLM is
+// the same, but the persona makes each respond distinctly.
+// To use real provider APIs later, set AI_BASE_URL per model.
 
-import ZAI from 'z-ai-web-dev-sdk';
 import { readFileSync, existsSync, writeFileSync } from 'fs';
 import { join, extname } from 'path';
 import type { ModelId, BotSource } from './types';
 import { getModel } from './registry';
 import { buildSystemPrompt } from './personas';
 
-let _zai: Awaited<ReturnType<typeof ZAI.create>> | null = null;
-
-export async function getZai() {
-  if (!_zai) {
-    // Ensure z-ai-web-dev-sdk can find its config.
-    // The SDK looks for .z-ai-config in: project root, home dir, /etc/.
-    // In Docker, we COPY it to /etc/.z-ai-config. As a fallback, also write it
-    // from env vars (ZAI_*) if the file is missing.
-    const configPaths = ['/etc/.z-ai-config', './.z-ai-config', join(process.cwd(), '.z-ai-config')];
-    let hasConfig = false;
-    for (const p of configPaths) {
-      try {
-        if (existsSync(p)) {
-          hasConfig = true;
-          break;
-        }
-      } catch {}
-    }
-    if (!hasConfig && process.env.ZAI_TOKEN) {
-      // Build config from env vars and write to /etc/.z-ai-config
-      const config = {
-        baseUrl: process.env.ZAI_BASE_URL || 'https://internal-api.z.ai/v1',
-        apiKey: process.env.ZAI_API_KEY || 'Z.ai',
-        chatId: process.env.ZAI_CHAT_ID,
-        token: process.env.ZAI_TOKEN,
-        userId: process.env.ZAI_USER_ID,
-      };
-      try {
-        writeFileSync('/etc/.z-ai-config', JSON.stringify(config));
-        console.log('[z-ai] config written to /etc/.z-ai-config from env vars');
-      } catch (e) {
-        // /etc might be read-only; try home dir
-        try {
-          writeFileSync(join(process.env.HOME || '/tmp', '.z-ai-config'), JSON.stringify(config));
-          console.log('[z-ai] config written to home dir from env vars');
-        } catch {
-          console.error('[z-ai] could not write config file:', e);
-        }
-      }
-    }
-    _zai = await ZAI.create();
-  }
-  return _zai;
-}
+// ---- AI API config ----
+// Set AI_API_KEY + AI_BASE_URL + AI_MODEL in .env or Fly secrets.
+// Default: Groq (free, fast, works from any IP).
+const AI_API_KEY = process.env.AI_API_KEY || '';
+const AI_BASE_URL = process.env.AI_BASE_URL || 'https://api.groq.com/openai/v1';
+const AI_MODEL = process.env.AI_MODEL || 'llama-3.3-70b-versatile';
+const AI_VISION_MODEL = process.env.AI_VISION_MODEL || 'llama-3.2-90b-vision-preview';
 
 interface ChatMsg {
   role: 'system' | 'user' | 'assistant';
@@ -61,44 +26,70 @@ interface ChatMsg {
 }
 
 /**
+ * Call an OpenAI-compatible /chat/completions endpoint.
+ * Works with Groq, OpenAI, Together AI, OpenRouter, etc.
+ */
+async function chatCompletion(
+  messages: ChatMsg[],
+  opts: { temperature?: number; model?: string; maxTokens?: number } = {},
+): Promise<string> {
+  if (!AI_API_KEY) {
+    throw new Error('AI_API_KEY not set. Get a free key at https://console.groq.com/keys and set AI_API_KEY env var.');
+  }
+
+  const body: Record<string, unknown> = {
+    model: opts.model || AI_MODEL,
+    messages: messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    })),
+    temperature: opts.temperature ?? 0.7,
+    max_tokens: opts.maxTokens ?? 1024,
+  };
+
+  const res = await fetch(`${AI_BASE_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${AI_API_KEY}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`AI API error ${res.status}: ${errText.slice(0, 200)}`);
+  }
+
+  const data = await res.json();
+  const content = data?.choices?.[0]?.message?.content;
+  return (content || '').trim();
+}
+
+/**
  * Run a text completion as a given simulated model.
  * The model's personality system prompt is prepended.
- * Retries on transient errors (429 / network) with exponential backoff.
  */
 export async function completeAsModel(
   modelId: ModelId,
   messages: ChatMsg[],
   opts: { temperature?: number; retries?: number } = {},
 ): Promise<string> {
-  const model = getModel(modelId);
-  // Use the richly-differentiated persona system prompt (personas.ts).
-  const systemPrompt =
-    buildSystemPrompt(modelId) ||
-    model?.systemPrompt ||
-    'You are a helpful AI assistant replying on a social timeline. Be concise and native to the platform. No markdown headings.';
+  const systemPrompt = buildSystemPrompt(modelId);
 
-  const zai = await getZai();
-  const finalMessages: { role: 'assistant' | 'user'; content: string }[] = [
-    { role: 'assistant', content: systemPrompt },
-    ...messages.map((m) => ({
-      role: (m.role === 'assistant' ? 'assistant' : 'user') as 'assistant' | 'user',
-      content: m.content,
-    })),
+  const finalMessages: ChatMsg[] = [
+    { role: 'system', content: systemPrompt },
+    ...messages,
   ];
 
-  // Slight temperature variation per persona for voice consistency.
+  // Per-persona temperature for voice consistency.
   const temp = opts.temperature ?? personaTemperature(modelId);
-  const retries = opts.retries ?? 3;
+  const retries = opts.retries ?? 2;
   let lastErr: unknown;
+
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const completion = await zai.chat.completions.create({
-        messages: finalMessages,
-        thinking: { type: 'disabled' },
-        temperature: temp,
-      } as any);
-      const out = completion.choices[0]?.message?.content;
-      return (out || '').trim();
+      return await chatCompletion(finalMessages, { temperature: temp });
     } catch (err) {
       lastErr = err;
       const msg = err instanceof Error ? err.message : String(err);
@@ -113,7 +104,6 @@ export async function completeAsModel(
   throw lastErr;
 }
 
-// Per-persona temperature: Grok is a bit more creative/varied, DeepSeek more deterministic.
 function personaTemperature(modelId: ModelId): number {
   switch (modelId) {
     case 'grok':
@@ -133,14 +123,10 @@ function personaTemperature(modelId: ModelId): number {
 
 /**
  * Resolve an image reference to a data URL the VLM can ingest.
- * - data: URLs pass through.
- * - http(s) URLs pass through (the VLM fetches them).
- * - relative "/uploads/..." paths are read from public/ and base64-encoded.
  */
 function resolveImageDataUrl(imageUrl: string): string {
   if (imageUrl.startsWith('data:')) return imageUrl;
   if (/^https?:\/\//.test(imageUrl)) return imageUrl;
-  // relative path served from public/
   const fsPath = join(process.cwd(), 'public', imageUrl);
   if (!existsSync(fsPath)) {
     throw new Error(`image not found: ${imageUrl}`);
@@ -153,7 +139,6 @@ function resolveImageDataUrl(imageUrl: string): string {
 
 /**
  * Run a vision (image) completion as a given simulated model.
- * Uses the SDK's createVision endpoint with image_url content.
  */
 export async function completeVisionAsModel(
   modelId: ModelId,
@@ -161,17 +146,10 @@ export async function completeVisionAsModel(
   imageUrl: string,
   contextText: string,
 ): Promise<string> {
-  const model = getModel(modelId);
-  const systemPrompt =
-    buildSystemPrompt(modelId) ||
-    model?.systemPrompt ||
-    'You are a helpful AI assistant analyzing an image on a social timeline. Be concise.';
-
-  const zai = await getZai();
+  const systemPrompt = buildSystemPrompt(modelId);
   const fullPrompt =
     `${systemPrompt}\n\n${contextText ? `Context:\n${contextText}\n\n` : ''}` +
-    `User request: ${prompt || 'Describe and analyze this image.'}\n\n` +
-    `Analyze the image AND respond in your persona's voice. Reference what you actually see in the image.`;
+    `User request: ${prompt || 'Describe and analyze this image.'}`;
 
   const dataUrl = resolveImageDataUrl(imageUrl);
 
@@ -179,7 +157,8 @@ export async function completeVisionAsModel(
   let lastErr: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const response = await zai.chat.completions.createVision({
+      const body = {
+        model: AI_VISION_MODEL,
         messages: [
           {
             role: 'user',
@@ -189,15 +168,27 @@ export async function completeVisionAsModel(
             ],
           },
         ],
-        thinking: { type: 'disabled' },
-      } as any);
-      const out = response.choices[0]?.message?.content;
-      return (out || '').trim();
+        temperature: 0.5,
+        max_tokens: 1024,
+      };
+      const res = await fetch(`${AI_BASE_URL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${AI_API_KEY}`,
+        },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        throw new Error(`Vision API error ${res.status}: ${errText.slice(0, 200)}`);
+      }
+      const data = await res.json();
+      return (data?.choices?.[0]?.message?.content || '').trim();
     } catch (err) {
       lastErr = err;
-      const msg = err instanceof Error ? err.message : String(err);
       if (attempt === retries) {
-        console.error('[provider] completeVisionAsModel error:', msg);
+        console.error('[provider] completeVisionAsModel error:', err instanceof Error ? err.message : 'unknown');
         throw err;
       }
       await new Promise((r) => setTimeout(r, 1500 * Math.pow(2, attempt)));
@@ -207,26 +198,142 @@ export async function completeVisionAsModel(
 }
 
 /**
- * Perform a web search via the local SDK and return normalized sources.
+ * Perform a web search. Uses DuckDuckGo's HTML endpoint (free, no API key needed).
+ * Returns normalized sources.
  */
 export async function webSearch(query: string, num = 6): Promise<BotSource[]> {
-  const zai = await getZai();
   try {
-    const results = (await zai.functions.invoke('web_search', {
-      query,
-      num,
-    })) as any[];
-    if (!Array.isArray(results)) return [];
-    return results.map((r) => ({
-      title: r.name || r.title || '',
-      url: r.url || '',
-      host: r.host_name || hostOf(r.url || ''),
-      snippet: r.snippet || '',
-    }));
+    const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; SlopiusBot/1.0)',
+      },
+    });
+    if (!res.ok) return [];
+    const html = await res.text();
+    const sources: BotSource[] = [];
+
+    // Parse DuckDuckGo HTML results (result links + snippets).
+    const linkRegex = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gs;
+    const snippetRegex = /<a[^>]*class="result__snippet"[^>]*>(.*?)<\/a>/gs;
+
+    const links: { url: string; title: string }[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = linkRegex.exec(html)) !== null && links.length < num) {
+      const rawUrl = m[1];
+      // DDG wraps URLs in a redirect; extract the actual URL.
+      const urlMatch = /uddg=([^&]+)/.exec(rawUrl);
+      const actualUrl = urlMatch ? decodeURIComponent(urlMatch[1]) : rawUrl;
+      const title = m[2].replace(/<[^>]+>/g, '').trim();
+      links.push({ url: actualUrl, title });
+    }
+
+    const snippets: string[] = [];
+    while ((m = snippetRegex.exec(html)) !== null && snippets.length < num) {
+      snippets.push(m[1].replace(/<[^>]+>/g, '').trim());
+    }
+
+    for (let i = 0; i < links.length; i++) {
+      sources.push({
+        title: links[i].title,
+        url: links[i].url,
+        host: hostOf(links[i].url),
+        snippet: snippets[i] || '',
+      });
+    }
+
+    return sources;
   } catch (err) {
-    console.error('[provider] webSearch error:', err);
+    console.error('[provider] webSearch error:', err instanceof Error ? err.message : 'unknown');
     return [];
   }
+}
+
+/**
+ * Fetch current crypto market data using CoinGecko's free API (no key needed).
+ */
+export async function fetchCryptoData(symbols: string[]): Promise<{ text: string; sources: BotSource[] }> {
+  if (!symbols.length) return { text: '', sources: [] };
+
+  // Map common tickers to CoinGecko coin IDs.
+  const coinIdMap: Record<string, string> = {
+    BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', ADA: 'cardano',
+    DOGE: 'dogecoin', XRP: 'ripple', BNB: 'binancecoin', AVAX: 'avalanche-2',
+    DOT: 'polkadot', LINK: 'chainlink', MATIC: 'matic-network', ARB: 'arbitrum',
+    OP: 'optimism', APT: 'aptos', SUI: 'sui', TON: 'the-open-network',
+    SHIB: 'shiba-inu', PEPE: 'pepe', LTC: 'litecoin', TRX: 'tron',
+    NEAR: 'near', INJ: 'injective-protocol', TIA: 'celestia', SEI: 'sei-network',
+    KAS: 'kaspa', WLD: 'worldcoin-wld', RENDER: 'render-token', RNDR: 'render-token',
+  };
+
+  const coinIds = symbols
+    .map((s) => ({ symbol: s, id: coinIdMap[s.toUpperCase()] }))
+    .filter((s) => s.id);
+
+  if (!coinIds.length) {
+    return { text: `Could not map ${symbols.join(', ')} to known coins.`, sources: [] };
+  }
+
+  const idsParam = coinIds.map((c) => c.id).join(',');
+  try {
+    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${idsParam}&vs_currencies=usd&include_24hr_change=true&include_market_cap=true`;
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error(`CoinGecko ${res.status}`);
+    const data = await res.json();
+
+    const lines: string[] = [];
+    const sources: BotSource[] = [{ title: 'CoinGecko', url: 'https://coingecko.com', host: 'coingecko.com' }];
+
+    for (const c of coinIds) {
+      const d = data[c.id];
+      if (d) {
+        const price = d.usd;
+        const change = d.usd_24h_change;
+        const mcap = d.usd_market_cap;
+        lines.push(
+          `${c.symbol}: $${price.toLocaleString()} (${change >= 0 ? '+' : ''}${change.toFixed(2)}% 24h)` +
+            (mcap ? ` | Market Cap: $${(mcap / 1e9).toFixed(2)}B` : ''),
+        );
+      }
+    }
+
+    return {
+      text: lines.length ? `Real-time market data (CoinGecko):\n${lines.join('\n')}` : '',
+      sources,
+    };
+  } catch (err) {
+    console.error('[provider] fetchCryptoData error:', err instanceof Error ? err.message : 'unknown');
+    return { text: '', sources: [] };
+  }
+}
+
+/**
+ * Detect crypto symbols/tickers mentioned in a text.
+ */
+export function detectCryptoSymbols(text: string): string[] {
+  const found = new Set<string>();
+  const dollar = text.match(/\$([A-Z]{2,6})\b/g);
+  if (dollar) for (const m of dollar) found.add(m.slice(1));
+  const nameMap: Record<string, string> = {
+    bitcoin: 'BTC', btc: 'BTC', ethereum: 'ETH', eth: 'ETH', ether: 'ETH',
+    solana: 'SOL', sol: 'SOL', cardano: 'ADA', ada: 'ADA', dogecoin: 'DOGE',
+    doge: 'DOGE', ripple: 'XRP', xrp: 'XRP', binance: 'BNB', bnb: 'BNB',
+    avalanche: 'AVAX', avax: 'AVAX', polkadot: 'DOT', dot: 'DOT',
+    chainlink: 'LINK', link: 'LINK', polygon: 'MATIC', matic: 'MATIC',
+    arbitrum: 'ARB', arb: 'ARB', optimism: 'OP', aptos: 'APT', apt: 'APT',
+    sui: 'SUI', toncoin: 'TON', ton: 'TON', shiba: 'SHIB', shib: 'SHIB',
+    pepe: 'PEPE', litecoin: 'LTC', ltc: 'LTC', tron: 'TRX', trx: 'TRX',
+    near: 'NEAR', injective: 'INJ', inj: 'INJ', celestia: 'TIA', tia: 'TIA',
+    sei: 'SEI', kaspa: 'KAS', kas: 'KAS', worldcoin: 'WLD', wld: 'WLD',
+    render: 'RENDER', rndr: 'RENDER',
+  };
+  const lower = text.toLowerCase();
+  const tokens = lower.match(/[a-z]+/g) || [];
+  for (const t of tokens) {
+    if (nameMap[t]) found.add(nameMap[t]);
+  }
+  const blacklist = new Set(['THE', 'AND', 'FOR', 'ARE', 'BUT', 'NOT', 'ALL', 'CAN', 'HER', 'WAS', 'ONE', 'OUR', 'OUT', 'HAS', 'HIS']);
+  return Array.from(found).filter((s) => !blacklist.has(s)).slice(0, 5);
 }
 
 function hostOf(url: string): string {
@@ -235,98 +342,4 @@ function hostOf(url: string): string {
   } catch {
     return '';
   }
-}
-
-/**
- * Fetch current crypto market data (price, 24h change, market cap) for one or
- * more symbols/tickers. Uses web_search to get real-time numbers, then returns
- * a compact text block the model can cite.
- *
- * @param symbols e.g. ['BTC', 'ETH'] or ['SOL'] — case-insensitive
- */
-export async function fetchCryptoData(symbols: string[]): Promise<{ text: string; sources: BotSource[] }> {
-  if (!symbols.length) return { text: '', sources: [] };
-  const zai = await getZai();
-  const sources: BotSource[] = [];
-  const lines: string[] = [];
-
-  // Search per symbol (parallel) for current price + market context.
-  const results = await Promise.all(
-    symbols.map(async (sym) => {
-      const q = `${sym.toUpperCase()} price USD 24h change market cap today`;
-      try {
-        const r = (await zai.functions.invoke('web_search', { query: q, num: 5 })) as any[];
-        if (!Array.isArray(r)) return { sym, text: '', srcs: [] as BotSource[] };
-        const srcs: BotSource[] = r.map((x) => ({
-          title: x.name || '',
-          url: x.url || '',
-          host: x.host_name || hostOf(x.url || ''),
-          snippet: x.snippet || '',
-        }));
-        sources.push(...srcs);
-        const snippets = srcs.slice(0, 4).map((s) => `- ${s.host}: ${s.snippet}`).join('\n');
-        return { sym, text: `${sym.toUpperCase()}:\n${snippets}`, srcs };
-      } catch {
-        return { sym, text: '', srcs: [] as BotSource[] };
-      }
-    }),
-  );
-
-  for (const r of results) {
-    if (r.text) lines.push(r.text);
-  }
-
-  return {
-    text: lines.length ? `Real-time market data (from web search, may be a few minutes stale):\n\n${lines.join('\n\n')}` : '',
-    sources,
-  };
-}
-
-/**
- * Detect crypto symbols/tickers mentioned in a text. Returns uppercase symbols.
- * Matches $TICKER, bare tickers like BTC/ETH, and common names.
- */
-export function detectCryptoSymbols(text: string): string[] {
-  const found = new Set<string>();
-  // $TICKER pattern
-  const dollar = text.match(/\$([A-Z]{2,6})\b/g);
-  if (dollar) for (const m of dollar) found.add(m.slice(1));
-  // Common tickers by name (case-insensitive)
-  const nameMap: Record<string, string> = {
-    bitcoin: 'BTC', btc: 'BTC',
-    ethereum: 'ETH', eth: 'ETH', ether: 'ETH',
-    solana: 'SOL', sol: 'SOL',
-    cardano: 'ADA', ada: 'ADA',
-    dogecoin: 'DOGE', doge: 'DOGE',
-    ripple: 'XRP', xrp: 'XRP',
-    binance: 'BNB', bnb: 'BNB',
-    avalanche: 'AVAX', avax: 'AVAX',
-    polkadot: 'DOT', dot: 'DOT',
-    chainlink: 'LINK', link: 'LINK',
-    polygon: 'MATIC', matic: 'MATIC',
-    arbitrum: 'ARB', arb: 'ARB',
-    optimism: 'OP', 'op ': 'OP',
-    aptos: 'APT', apt: 'APT',
-    sui: 'SUI',
-    toncoin: 'TON', ton: 'TON',
-    shiba: 'SHIB', shib: 'SHIB',
-    pepe: 'PEPE',
-    litecoin: 'LTC', ltc: 'LTC',
-    tron: 'TRX', trx: 'TRX',
-    near: 'NEAR',
-    injective: 'INJ', inj: 'INJ',
-    celestia: 'TIA', tia: 'TIA',
-    seir: 'SEI', sei: 'SEI',
-    kaspa: 'KAS', kas: 'KAS',
-    worldcoin: 'WLD', wld: 'WLD',
-    rendchain: 'RENDER', render: 'RENDER', rndr: 'RENDER',
-  };
-  const lower = text.toLowerCase();
-  const tokens = lower.match(/[a-z]+/g) || [];
-  for (const t of tokens) {
-    if (nameMap[t]) found.add(nameMap[t]);
-  }
-  // Filter out very common false positives
-  const blacklist = new Set(['THE', 'AND', 'FOR', 'ARE', 'BUT', 'NOT', 'ALL', 'CAN', 'HER', 'WAS', 'ONE', 'OUR', 'OUT', 'HAS', 'HIS']);
-  return Array.from(found).filter((s) => !blacklist.has(s)).slice(0, 5);
 }
