@@ -43,8 +43,9 @@ async function chatCompletion(
       role: m.role,
       content: m.content,
     })),
-    temperature: opts.temperature ?? 0.7,
-    max_tokens: opts.maxTokens ?? 1024,
+    temperature: opts.temperature ?? 0.6,
+    max_completion_tokens: opts.maxTokens ?? 1024,
+    top_p: 0.95,
   };
 
   const res = await fetch(`${AI_BASE_URL}/chat/completions`, {
