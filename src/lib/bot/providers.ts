@@ -20,6 +20,11 @@ const AI_BASE_URL = process.env.AI_BASE_URL || 'https://api.groq.com/openai/v1';
 const AI_MODEL = process.env.AI_MODEL || 'llama-3.3-70b-versatile';
 const AI_VISION_MODEL = process.env.AI_VISION_MODEL || 'llama-3.2-90b-vision-preview';
 
+// ---- fal.ai config (image generation) ----
+// Get a FREE key at https://fal.ai/dashboard/keys — gives $1 free credits (~200 images).
+// Set FAL_KEY in Fly secrets.
+const FAL_KEY = process.env.FAL_KEY || '';
+
 interface ChatMsg {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -312,38 +317,92 @@ export async function fetchCryptoData(symbols: string[]): Promise<{ text: string
 }
 
 /**
- * Generate an image from a text prompt using Pollinations.ai (FREE, no API key).
- * Returns a Buffer with the PNG/JPEG image data.
+ * Generate an image from a text prompt.
  *
- * Uses the 'flux' model with enhanced parameters for better quality.
- * Pollinations also supports: 'turbo' (fast), 'flux-realism' (photorealistic),
- * 'flux-anime', 'flux-3d'. We default to 'flux' which is the best general model.
+ * Priority:
+ *   1. fal.ai FLUX.1 [dev] (best quality, Midjourney-level, $0.03/image)
+ *   2. Pollinations.ai flux (free fallback, no key needed)
  *
  * @param prompt Text description of the image to generate
- * @param opts width, height, seed, model (optional)
+ * @param opts width, height, seed (optional)
  */
 export async function generateImage(
   prompt: string,
-  opts: { width?: number; height?: number; seed?: number; model?: string } = {},
+  opts: { width?: number; height?: number; seed?: number } = {},
 ): Promise<Buffer> {
   const width = opts.width || 1024;
   const height = opts.height || 1024;
   const seed = opts.seed || Math.floor(Math.random() * 1000000);
-  const model = opts.model || 'flux';
 
-  // Pollinations.ai: simple GET request returns the image directly.
-  // Parameters:
-  //   model=flux (best general model)
-  //   nologo=true (hide watermark)
-  //   enhance=true (Pollinations enhances the prompt internally)
-  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${width}&height=${height}&seed=${seed}&model=${model}&nologo=true&enhance=true`;
+  // 1. Try fal.ai FLUX.1 [dev] (best quality)
+  if (FAL_KEY) {
+    try {
+      return await generateImageFal(prompt, width, height, seed);
+    } catch (err) {
+      console.error('[provider] fal.ai failed, falling back to Pollinations:', err instanceof Error ? err.message : 'unknown');
+    }
+  }
+
+  // 2. Fallback: Pollinations.ai (free, no key)
+  return generateImagePollinations(prompt, width, height, seed);
+}
+
+/**
+ * Generate an image using fal.ai FLUX.1 [dev] (best quality, Midjourney-level).
+ * API docs: https://fal.ai/models/fal-ai/flux/dev
+ */
+async function generateImageFal(prompt: string, width: number, height: number, seed: number): Promise<Buffer> {
+  const body = {
+    prompt,
+    image_size: { width, height },
+    num_inference_steps: 28,
+    guidance_scale: 3.5,
+    num_images: 1,
+    enable_safety_checker: true,
+    seed,
+  };
+
+  const res = await fetch('https://fal.run/fal-ai/flux/dev', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Key ${FAL_KEY}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`fal.ai ${res.status}: ${errText.slice(0, 200)}`);
+  }
+
+  const data = await res.json();
+  const imageUrl = data?.images?.[0]?.url;
+  if (!imageUrl) {
+    throw new Error('fal.ai: no image URL in response');
+  }
+
+  // Download the generated image.
+  const imgRes = await fetch(imageUrl);
+  if (!imgRes.ok) {
+    throw new Error(`fal.ai image download failed: ${imgRes.status}`);
+  }
+  const arrayBuffer = await imgRes.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
+/**
+ * Generate an image using Pollinations.ai (free, no key, fallback).
+ */
+async function generateImagePollinations(prompt: string, width: number, height: number, seed: number): Promise<Buffer> {
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${width}&height=${height}&seed=${seed}&model=flux&nologo=true&enhance=true`;
 
   const res = await fetch(url, {
     headers: { 'User-Agent': 'SlopiusBot/1.0' },
   });
 
   if (!res.ok) {
-    throw new Error(`Image generation failed: ${res.status} ${res.statusText}`);
+    throw new Error(`Pollinations failed: ${res.status} ${res.statusText}`);
   }
 
   const arrayBuffer = await res.arrayBuffer();

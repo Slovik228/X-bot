@@ -289,30 +289,16 @@ async function runImage(
   const enhancedPrompt = await enhanceImagePrompt(rawPrompt);
   console.log('[engine] image: enhanced prompt:', enhancedPrompt.slice(0, 100));
 
-  // Step 2: Pick model — if prompt mentions "photo", "realistic", "portrait" → flux-realism.
-  const lowerPrompt = (rawPrompt + ' ' + enhancedPrompt).toLowerCase();
-  const isRealistic = /\b(photo|realistic|portrait|real|face|person|landscape|nature|street)\b/.test(lowerPrompt);
-  const imageModel = isRealistic ? 'flux-realism' : 'flux';
-
-  // Step 3: Generate image.
+  // Step 2: Generate image (fal.ai FLUX.1 [dev] if FAL_KEY set, else Pollinations).
   let imageBuffer: Buffer | null = null;
   try {
-    imageBuffer = await generateImage(enhancedPrompt, {
-      width: 1024,
-      height: 1024,
-      model: imageModel,
-    });
+    imageBuffer = await generateImage(enhancedPrompt, { width: 1024, height: 1024 });
   } catch (err) {
     console.error('[engine] image generation failed:', err instanceof Error ? err.message : 'unknown');
-    // Retry with basic flux model
-    try {
-      imageBuffer = await generateImage(enhancedPrompt, { width: 1024, height: 1024, model: 'flux' });
-    } catch {
-      return {
-        imageBuffer: null,
-        caption: `Couldn't generate the image right now. Try again in a moment.`,
-      };
-    }
+    return {
+      imageBuffer: null,
+      caption: `Couldn't generate the image right now. Try again in a moment.`,
+    };
   }
 
   // Step 4: Generate caption in persona's voice.
