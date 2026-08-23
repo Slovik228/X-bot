@@ -27,11 +27,19 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
-# AI API config (Groq — free, fast, works from any IP).
-# AI_API_KEY MUST be set via Fly secrets.
+# ---- Critical env vars (baked into image, not dependent on .env loading) ----
+# Database
+ENV DATABASE_URL=file:/app/db/custom.db
+# AI API (Groq — free, works from any IP)
 ENV AI_BASE_URL=https://api.groq.com/openai/v1
 ENV AI_MODEL=openai/gpt-oss-120b
 ENV AI_VISION_MODEL=openai/gpt-oss-120b
+# Twitter config (keys are set via fly secrets — AI_API_KEY, TWITTER_*)
+ENV TWITTER_BOT_HANDLE=Slopius
+ENV TWITTER_INTERNAL_SECRET=local-dev-secret-change-me
+ENV BOT_RELAY_URL=https://slopius-relay.fly.dev/internal/broadcast
+ENV LISTENER_URL=https://slopius-listener.fly.dev
+ENV NEXT_APP_URL=https://slopius-web.fly.dev
 # Prisma needs openssl + ca-certificates for the engine binary + HTTPS calls.
 # bash is needed because start-web.sh uses bash-specific syntax (set -e works in dash,
 # but other constructs may not).

@@ -47,6 +47,10 @@ else
 fi
 
 echo "[startup] final DB size: $(stat -c %s /app/db/custom.db 2>/dev/null || echo 0) bytes"
+# Ensure DB file is writable (volume mount may change permissions)
+chmod 666 /app/db/custom.db 2>/dev/null || true
+chmod 777 /app/db 2>/dev/null || true
+echo "[startup] DB permissions fixed"
 
 echo "[startup] starting Next.js server on port ${PORT:-3000}..."
 exec node server.js
