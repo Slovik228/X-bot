@@ -315,20 +315,28 @@ export async function fetchCryptoData(symbols: string[]): Promise<{ text: string
  * Generate an image from a text prompt using Pollinations.ai (FREE, no API key).
  * Returns a Buffer with the PNG/JPEG image data.
  *
+ * Uses the 'flux' model with enhanced parameters for better quality.
+ * Pollinations also supports: 'turbo' (fast), 'flux-realism' (photorealistic),
+ * 'flux-anime', 'flux-3d'. We default to 'flux' which is the best general model.
+ *
  * @param prompt Text description of the image to generate
- * @param opts width, height, seed (optional)
+ * @param opts width, height, seed, model (optional)
  */
 export async function generateImage(
   prompt: string,
-  opts: { width?: number; height?: number; seed?: number } = {},
+  opts: { width?: number; height?: number; seed?: number; model?: string } = {},
 ): Promise<Buffer> {
   const width = opts.width || 1024;
   const height = opts.height || 1024;
   const seed = opts.seed || Math.floor(Math.random() * 1000000);
+  const model = opts.model || 'flux';
 
   // Pollinations.ai: simple GET request returns the image directly.
-  // Add model=flux for better quality, nologo=true to hide watermark.
-  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${width}&height=${height}&seed=${seed}&model=flux&nologo=true`;
+  // Parameters:
+  //   model=flux (best general model)
+  //   nologo=true (hide watermark)
+  //   enhance=true (Pollinations enhances the prompt internally)
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${width}&height=${height}&seed=${seed}&model=${model}&nologo=true&enhance=true`;
 
   const res = await fetch(url, {
     headers: { 'User-Agent': 'SlopiusBot/1.0' },
@@ -340,6 +348,34 @@ export async function generateImage(
 
   const arrayBuffer = await res.arrayBuffer();
   return Buffer.from(arrayBuffer);
+}
+
+/**
+ * Enhance a raw image prompt using the LLM — translates to English, adds detail
+ * and style keywords for better image quality.
+ *
+ * Example: "кот космонавт" → "a cat astronaut floating in space, stars, detailed,
+ * digital art, vibrant colors, cinematic lighting, 8k"
+ */
+export async function enhanceImagePrompt(rawPrompt: string): Promise<string> {
+  const systemPrompt =
+    'You are an image prompt engineer. The user gives you a short description (possibly in Russian). ' +
+    'Return ONLY a detailed, enhanced English prompt for an AI image generator. ' +
+    'Add style, lighting, quality keywords. Max 200 words. No explanations, just the prompt.';
+  
+  try {
+    const enhanced = await chatCompletion(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: rawPrompt },
+      ],
+      { temperature: 0.8, maxTokens: 200 },
+    );
+    return enhanced || rawPrompt;
+  } catch {
+    // If LLM fails, use the raw prompt
+    return rawPrompt;
+  }
 }
 
 /**

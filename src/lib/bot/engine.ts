@@ -17,7 +17,7 @@ import { BOT_HANDLE } from './types';
 import { getModel } from './registry';
 import { parseMention } from './parser';
 import { collectContext, renderContext } from './context';
-import { completeAsModel, completeVisionAsModel, webSearch, fetchCryptoData, detectCryptoSymbols, generateImage } from './providers';
+import { completeAsModel, completeVisionAsModel, webSearch, fetchCryptoData, detectCryptoSymbols, generateImage, enhanceImagePrompt } from './providers';
 import { splitIntoChunks, formatSources, shortenForCompare } from './response';
 import { checkRateLimit } from './ratelimit';
 
@@ -272,30 +272,53 @@ async function runResearch(
 
 /**
  * /image — generate an image from a text prompt using Pollinations.ai (free).
- * Returns the image buffer + a caption generated in the persona's voice.
+ * 1. Enhance the prompt via LLM (translate RU→EN, add detail)
+ * 2. Pick model: 'flux' for general, 'flux-realism' for photos
+ * 3. Generate image
+ * 4. Generate caption in persona's voice
  */
 async function runImage(
   model: ModelId,
   ctx: CollectedContext,
   parsed: ParsedMention,
 ): Promise<{ imageBuffer: Buffer | null; caption: string }> {
-  const prompt = parsed.query || 'an abstract digital art piece';
-  let imageBuffer: Buffer | null = null;
+  const rawPrompt = parsed.query || 'an abstract digital art piece';
 
+  // Step 1: Enhance the prompt (translate + add detail) via LLM.
+  console.log('[engine] image: enhancing prompt...');
+  const enhancedPrompt = await enhanceImagePrompt(rawPrompt);
+  console.log('[engine] image: enhanced prompt:', enhancedPrompt.slice(0, 100));
+
+  // Step 2: Pick model — if prompt mentions "photo", "realistic", "portrait" → flux-realism.
+  const lowerPrompt = (rawPrompt + ' ' + enhancedPrompt).toLowerCase();
+  const isRealistic = /\b(photo|realistic|portrait|real|face|person|landscape|nature|street)\b/.test(lowerPrompt);
+  const imageModel = isRealistic ? 'flux-realism' : 'flux';
+
+  // Step 3: Generate image.
+  let imageBuffer: Buffer | null = null;
   try {
-    imageBuffer = await generateImage(prompt, { width: 1024, height: 1024 });
+    imageBuffer = await generateImage(enhancedPrompt, {
+      width: 1024,
+      height: 1024,
+      model: imageModel,
+    });
   } catch (err) {
     console.error('[engine] image generation failed:', err instanceof Error ? err.message : 'unknown');
-    return {
-      imageBuffer: null,
-      caption: `Couldn't generate the image right now. Pollinations.ai may be busy — try again in a moment.`,
-    };
+    // Retry with basic flux model
+    try {
+      imageBuffer = await generateImage(enhancedPrompt, { width: 1024, height: 1024, model: 'flux' });
+    } catch {
+      return {
+        imageBuffer: null,
+        caption: `Couldn't generate the image right now. Try again in a moment.`,
+      };
+    }
   }
 
-  // Generate a short caption in the persona's voice.
+  // Step 4: Generate caption in persona's voice.
   const captionPrompt =
-    `Generate a short, punchy caption for an image you just created from the prompt: "${prompt}". ` +
-    `Reply in your persona's voice. 1-2 sentences max. No markdown. Native social media reply.`;
+    `Generate a short, punchy caption for an image you just created from the prompt: "${rawPrompt}". ` +
+    `Reply in your persona's voice. 1-2 sentences max. No markdown.`;
   const caption = await completeAsModel(model, [
     { role: 'user', content: captionPrompt },
   ]);
