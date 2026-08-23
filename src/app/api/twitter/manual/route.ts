@@ -11,7 +11,7 @@ import { runBot } from '@/lib/bot/engine';
 import { publishBotReply } from '@/lib/bot/publish';
 import { broadcast } from '@/lib/bot/relay';
 import { serializeTweet } from '@/lib/bot/serialize';
-import { postingEnabled, postReplyTweet, BOT_HANDLE } from '@/lib/twitter/client';
+import { postingEnabled, postReplyTweet, BOT_HANDLE, uploadMedia } from '@/lib/twitter/client';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -93,10 +93,23 @@ export async function POST(req: NextRequest) {
   const posted: { chunkIndex: number; twitterId: string | null; error?: string }[] = [];
   if (postingEnabled()) {
     let prevTwitterId = twitterId;
+
+    // If the bot generated an image, upload it and attach to the FIRST tweet.
+    let mediaIds: string[] | undefined;
+    if (result.imageBuffer) {
+      try {
+        const mediaId = await uploadMedia(result.imageBuffer, 'image/png');
+        if (mediaId) mediaIds = [mediaId];
+      } catch (err) {
+        console.error('[twitter] image upload failed:', err instanceof Error ? err.message : 'unknown');
+      }
+    }
+
     for (let i = 0; i < saved.length; i++) {
       const chunk = saved[i];
       try {
-        const postedId = await postReplyTweet(chunk.content.slice(0, 280), prevTwitterId);
+        const ids = i === 0 ? mediaIds : undefined;
+        const postedId = await postReplyTweet(chunk.content.slice(0, 280), prevTwitterId, ids);
         posted.push({ chunkIndex: i, twitterId: postedId });
         if (postedId) {
           await db.tweet.update({ where: { id: chunk.id }, data: { twitterId: postedId } });

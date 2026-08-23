@@ -17,7 +17,8 @@ export type ActionId =
   | 'code'
   | 'compare'
   | 'price'
-  | 'token';
+  | 'token'
+  | 'image';
 
 export interface ModelCapabilities {
   vision: boolean;
@@ -90,6 +91,8 @@ export interface BotRunResult {
   sources: BotSource[];
   comparisons: { model: ModelId; text: string }[];
   routingNote: string;
+  imageBuffer?: Buffer | null;
+  imageCaption?: string;
 }
 
 // Bot handle: read from env (real X handle) or default to 'aixbot' (local sim).

@@ -13,6 +13,23 @@ import type { ParsedMention, ModelId, ActionId } from './types';
 import { BOT_HANDLE } from './types';
 import { isModelCommand, isActionCommand } from './registry';
 
+// Aliases for the 'image' action — users can type any of these.
+const IMAGE_ALIASES: Record<string, string> = {
+  img: 'image',
+  image: 'image',
+  draw: 'image',
+  create: 'image',
+  generate: 'image',
+  gen: 'image',
+  // Russian aliases
+  'нарисуй': 'image',
+  'создай': 'image',
+  'сгенерируй': 'image',
+  'картинку': 'image',
+  'фото': 'image',
+  'рисунок': 'image',
+};
+
 export function parseMention(rawText: string, hasImage = false): ParsedMention | null {
   const text = rawText || '';
   // Find the @bot mention (case-insensitive).
@@ -36,9 +53,16 @@ export function parseMention(rawText: string, hasImage = false): ParsedMention |
         model = cmd as ModelId;
         continue;
       }
-      if (!action && isActionCommand(cmd)) {
-        action = cmd as ActionId;
-        continue;
+      if (!action) {
+        // Check image aliases first (before isActionCommand, which doesn't know about them)
+        if (IMAGE_ALIASES[cmd]) {
+          action = 'image' as ActionId;
+          continue;
+        }
+        if (isActionCommand(cmd)) {
+          action = cmd as ActionId;
+          continue;
+        }
       }
       // unknown slash token -> treat as plain text (keep it)
       remaining.push(tok);

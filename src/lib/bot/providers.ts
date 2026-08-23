@@ -312,6 +312,37 @@ export async function fetchCryptoData(symbols: string[]): Promise<{ text: string
 }
 
 /**
+ * Generate an image from a text prompt using Pollinations.ai (FREE, no API key).
+ * Returns a Buffer with the PNG/JPEG image data.
+ *
+ * @param prompt Text description of the image to generate
+ * @param opts width, height, seed (optional)
+ */
+export async function generateImage(
+  prompt: string,
+  opts: { width?: number; height?: number; seed?: number } = {},
+): Promise<Buffer> {
+  const width = opts.width || 1024;
+  const height = opts.height || 1024;
+  const seed = opts.seed || Math.floor(Math.random() * 1000000);
+
+  // Pollinations.ai: simple GET request returns the image directly.
+  // Add model=flux for better quality, nologo=true to hide watermark.
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${width}&height=${height}&seed=${seed}&model=flux&nologo=true`;
+
+  const res = await fetch(url, {
+    headers: { 'User-Agent': 'SlopiusBot/1.0' },
+  });
+
+  if (!res.ok) {
+    throw new Error(`Image generation failed: ${res.status} ${res.statusText}`);
+  }
+
+  const arrayBuffer = await res.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
+/**
  * Detect crypto symbols/tickers mentioned in a text.
  */
 export function detectCryptoSymbols(text: string): string[] {

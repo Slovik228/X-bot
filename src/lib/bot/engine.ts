@@ -17,7 +17,7 @@ import { BOT_HANDLE } from './types';
 import { getModel } from './registry';
 import { parseMention } from './parser';
 import { collectContext, renderContext } from './context';
-import { completeAsModel, completeVisionAsModel, webSearch, fetchCryptoData, detectCryptoSymbols } from './providers';
+import { completeAsModel, completeVisionAsModel, webSearch, fetchCryptoData, detectCryptoSymbols, generateImage } from './providers';
 import { splitIntoChunks, formatSources, shortenForCompare } from './response';
 import { checkRateLimit } from './ratelimit';
 
@@ -270,6 +270,39 @@ async function runResearch(
   return { text, sources };
 }
 
+/**
+ * /image — generate an image from a text prompt using Pollinations.ai (free).
+ * Returns the image buffer + a caption generated in the persona's voice.
+ */
+async function runImage(
+  model: ModelId,
+  ctx: CollectedContext,
+  parsed: ParsedMention,
+): Promise<{ imageBuffer: Buffer | null; caption: string }> {
+  const prompt = parsed.query || 'an abstract digital art piece';
+  let imageBuffer: Buffer | null = null;
+
+  try {
+    imageBuffer = await generateImage(prompt, { width: 1024, height: 1024 });
+  } catch (err) {
+    console.error('[engine] image generation failed:', err instanceof Error ? err.message : 'unknown');
+    return {
+      imageBuffer: null,
+      caption: `Couldn't generate the image right now. Pollinations.ai may be busy — try again in a moment.`,
+    };
+  }
+
+  // Generate a short caption in the persona's voice.
+  const captionPrompt =
+    `Generate a short, punchy caption for an image you just created from the prompt: "${prompt}". ` +
+    `Reply in your persona's voice. 1-2 sentences max. No markdown. Native social media reply.`;
+  const caption = await completeAsModel(model, [
+    { role: 'user', content: captionPrompt },
+  ]);
+
+  return { imageBuffer, caption };
+}
+
 async function runCompare(
   ctx: CollectedContext,
   parsed: ParsedMention,
@@ -427,6 +460,23 @@ export async function runBot(tweetId: string): Promise<BotRunResult> {
     const r = await runToken(model, ctx, parsed);
     text = r.text;
     sources = r.sources;
+  } else if (action === 'image') {
+    const r = await runImage(model, ctx, parsed);
+    if (r.imageBuffer) {
+      // Image generated — chunks = caption only, imageBuffer returned separately.
+      return {
+        model,
+        requestedModel: parsed.model,
+        action,
+        chunks: splitIntoChunks(r.caption),
+        sources: [],
+        comparisons: [],
+        routingNote: `image generated via Pollinations.ai`,
+        imageBuffer: r.imageBuffer,
+        imageCaption: r.caption,
+      };
+    }
+    text = r.caption; // error message
   } else {
     // General path: if the tweet mentions crypto symbols AND asks about price/buy/sell,
     // auto-augment with real-time price data so the model has current numbers.

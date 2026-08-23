@@ -28,6 +28,7 @@ import {
   extractImageUrl,
   extractReferenced,
   getTweetWithContext,
+  uploadMedia,
 } from '@/lib/twitter/client';
 import type { TweetV2, UserV2 } from 'twitter-api-v2';
 
@@ -241,10 +242,27 @@ export async function POST(req: NextRequest) {
   const posted: { chunkIndex: number; twitterId: string | null; error?: string }[] = [];
   if (postingEnabled()) {
     let prevTwitterId = tw.id; // reply to the original mention
+
+    // If the bot generated an image, upload it and attach to the FIRST tweet.
+    let mediaIds: string[] | undefined;
+    if (result.imageBuffer) {
+      try {
+        const mediaId = await uploadMedia(result.imageBuffer, 'image/png');
+        if (mediaId) {
+          mediaIds = [mediaId];
+          console.log('[twitter] image uploaded, media_id:', mediaId);
+        }
+      } catch (err) {
+        console.error('[twitter] image upload failed:', err instanceof Error ? err.message : 'unknown');
+      }
+    }
+
     for (let i = 0; i < saved.length; i++) {
       const chunk = saved[i];
       try {
-        const postedId = await postReplyTweet(chunk.content.slice(0, 280), prevTwitterId || undefined);
+        // Attach media only to the FIRST tweet in the thread.
+        const ids = i === 0 ? mediaIds : undefined;
+        const postedId = await postReplyTweet(chunk.content.slice(0, 280), prevTwitterId || undefined, ids);
         posted.push({ chunkIndex: i, twitterId: postedId });
         if (postedId) {
           await db.tweet.update({ where: { id: chunk.id }, data: { twitterId: postedId } });

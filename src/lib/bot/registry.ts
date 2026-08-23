@@ -155,6 +155,13 @@ export const COMMANDS: CommandInfo[] = [
     description: 'Deep token analysis: price, tokenomics, risks, buy/sell read.',
     usage: '@aixbot /token ARB',
   },
+  {
+    id: 'image',
+    type: 'action',
+    label: '/img',
+    description: 'Generate an image from text. Aliases: /draw /create /generate /нарисуй /создай',
+    usage: '@aixbot /img cyberpunk city at night',
+  },
 ];
 
 export const MODEL_IDS = MODELS.map((m) => m.id);
@@ -168,6 +175,7 @@ export const ACTION_IDS: ActionId[] = [
   'compare',
   'price',
   'token',
+  'image',
 ];
 
 export function getModel(id: ModelId): ModelInfo | undefined {

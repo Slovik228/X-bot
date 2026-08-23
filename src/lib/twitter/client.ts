@@ -125,6 +125,7 @@ export async function getTweetWithContext(
 export async function postReplyTweet(
   text: string,
   replyToId?: string,
+  mediaIds?: string[],
 ): Promise<string | null> {
   if (!postingEnabled()) return null;
   const c = userClient();
@@ -132,8 +133,30 @@ export async function postReplyTweet(
   if (replyToId) {
     payload.reply = { in_reply_to_tweet_id: replyToId };
   }
+  if (mediaIds && mediaIds.length > 0) {
+    payload.media = { media_ids: mediaIds };
+  }
   const res: any = await c.v2.tweet(payload as any);
   return res?.data?.id || null;
+}
+
+/**
+ * Upload media (image) to Twitter using v1.1 media/upload.
+ * Returns the media_id_string to attach to a tweet.
+ *
+ * OAuth 1.0a user context is required (same as posting).
+ */
+export async function uploadMedia(imageBuffer: Buffer, mimeType: string = 'image/png'): Promise<string | null> {
+  if (!postingEnabled()) return null;
+  const c = userClient();
+  // twitter-api-v2 v1.1 media upload
+  try {
+    const media = await c.v1.uploadMedia(imageBuffer, { mimeType });
+    return media;
+  } catch (err) {
+    console.error('[twitter] uploadMedia failed:', err instanceof Error ? err.message : 'unknown');
+    throw err;
+  }
 }
 
 export function extractImageUrl(tweet: TweetV2, includes?: any): string | null {
