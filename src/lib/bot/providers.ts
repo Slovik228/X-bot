@@ -155,6 +155,11 @@ export async function completeAsModel(
 function sanitizeResponse(text: string): string {
   let sanitized = text;
 
+  // NEVER redact the bot's official trading wallet.
+  const TRADING_WALLET = 'kr2c1s6NGa1MKZJoa3wHs9Za2uGm673m2dWfSX1vuwt';
+  const WALLET_PLACEHOLDER = '__TRADING_WALLET__';
+  sanitized = sanitized.split(TRADING_WALLET).join(WALLET_PLACEHOLDER);
+
   // Bitcoin addresses: bc1... (bech32), 1... / 3... (legacy/P2SH)
   sanitized = sanitized.replace(/\bbc1[a-z0-9]{39,59}\b/gi, '[REDACTED — wallet address]');
   sanitized = sanitized.replace(/\b[13][a-km-zA-HJ-NP-Z1-9]{25,34}\b/g, '[REDACTED — wallet address]');
@@ -187,6 +192,9 @@ function sanitizeResponse(text: string): string {
   // Seed phrases: 12 or 24 words after "seed phrase" or "mnemonic"
   const seedPhraseRegex = /(?:seed\s+phrase|mnemonic|recovery\s+phrase)[:\s]*([a-z]+\s+){11,23}[a-z]+/gi;
   sanitized = sanitized.replace(seedPhraseRegex, '[REDACTED — seed phrase]');
+
+  // Restore the bot's trading wallet.
+  sanitized = sanitized.split(WALLET_PLACEHOLDER).join(TRADING_WALLET);
 
   return sanitized;
 }
