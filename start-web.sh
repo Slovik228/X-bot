@@ -1,5 +1,5 @@
 #!/bin/bash
-# start-web.sh - load .env, ALWAYS init fresh SQLite DB from template, then start Next.js.
+# start-web.sh - load .env, run Prisma migrations, then start Next.js.
 set -e
 
 echo "=== Slopius startup ==="
@@ -14,32 +14,23 @@ fi
 
 echo "[startup] working dir: $(pwd)"
 echo "[startup] TWITTER_BOT_HANDLE: ${TWITTER_BOT_HANDLE:-unset}"
-echo "[startup] DATABASE_URL: ${DATABASE_URL:-unset}"
+echo "[startup] DATABASE_URL set: $([ -n "$DATABASE_URL" ] && echo yes || echo no)"
+echo "[startup] DEEPSEEK_API_KEY set: $([ -n "$DEEPSEEK_API_KEY" ] && echo yes || echo no)"
 echo "[startup] AI_API_KEY set: $([ -n "$AI_API_KEY" ] && echo yes || echo no)"
+echo "[startup] FAL_KEY set: $([ -n "$FAL_KEY" ] && echo yes || echo no)"
 
-# ALWAYS copy fresh DB from template (avoids corruption/permission/schema issues).
-# The template was pre-built at Docker build time with the correct schema.
-# Tweet history is lost on each restart, but the bot re-seeds users automatically.
-echo "[startup] copying fresh DB from template..."
-if [ -f /app/custom.db.template ]; then
-  TEMPLATE_SIZE=$(stat -c %s /app/custom.db.template)
-  echo "[startup] template size: ${TEMPLATE_SIZE} bytes"
-  if [ "$TEMPLATE_SIZE" -gt 1024 ]; then
-    rm -f /app/db/custom.db /app/db/custom.db-journal /app/db/custom.db-wal /app/db/custom.db-shm
-    cp /app/custom.db.template /app/db/custom.db
-    chmod 666 /app/db/custom.db
-    chmod 777 /app/db
-    echo "[startup] fresh DB copied from template + permissions set."
-  else
-    echo "[startup] ERROR: template is empty! Running prisma db push..."
-    DATABASE_URL="file:/app/db/custom.db" bunx prisma db push --accept-data-loss 2>&1 || echo "[startup] prisma failed"
-  fi
+# Run Prisma migrations (creates tables if they don't exist, safe to re-run).
+# DATABASE_URL must point to PostgreSQL (set via Fly secrets).
+echo "[startup] running prisma migrate deploy..."
+if [ -n "$DATABASE_URL" ]; then
+  bunx prisma migrate deploy 2>&1 || {
+    echo "[startup] WARNING: prisma migrate failed — trying db push..."
+    bunx prisma db push --accept-data-loss 2>&1 || echo "[startup] prisma db push also failed"
+  }
+  echo "[startup] migrations done."
 else
-  echo "[startup] ERROR: no template found! Running prisma db push..."
-  DATABASE_URL="file:/app/db/custom.db" bunx prisma db push --accept-data-loss 2>&1 || echo "[startup] prisma failed"
+  echo "[startup] ERROR: DATABASE_URL not set — app will crash on DB queries."
 fi
-
-echo "[startup] final DB: $(ls -la /app/db/custom.db 2>&1)"
 
 echo "[startup] starting Next.js server on port ${PORT:-3000}..."
 exec node server.js
