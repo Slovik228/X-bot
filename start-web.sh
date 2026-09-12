@@ -12,6 +12,7 @@ echo "[startup] FAL_KEY set: $([ -n "$FAL_KEY" ] && echo yes || echo no)"
 
 # ALWAYS copy fresh DB from template
 echo "[startup] copying fresh DB from template..."
+mkdir -p /app/db
 rm -f /app/db/custom.db /app/db/custom.db-journal
 if [ -f /app/custom.db.template ]; then
   cp /app/custom.db.template /app/db/custom.db
