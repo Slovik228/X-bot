@@ -17,9 +17,9 @@ ENV NEXT_PUBLIC_BOT_HANDLE=kemocalls
 RUN bunx prisma generate && bun run build
 RUN mkdir -p .next/standalone/node_modules/@prisma && \
     cp -r node_modules/@prisma/client .next/standalone/node_modules/@prisma/ 2>/dev/null || true
-# Generate migration SQL from schema (applied at runtime against PostgreSQL).
-RUN mkdir -p prisma/migrations/0_init && \
-    bunx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > prisma/migrations/0_init/migration.sql || true
+# Pre-create the SQLite database at BUILD time (template for runtime).
+RUN DATABASE_URL="file:/app/db/custom.db" bunx prisma db push --accept-data-loss
+RUN ls -la /app/db/custom.db && echo "DB template created OK" || (echo "ERROR: DB template NOT created" && exit 1)
 
 FROM oven/bun:1-slim AS runner
 WORKDIR /app
@@ -27,7 +27,8 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 # ---- Critical env vars (baked into image, not dependent on .env loading) ----
-# Database URL is set via Fly secrets (DATABASE_URL=postgresql://...)
+# Database (SQLite — until Fly Postgres is set up)
+ENV DATABASE_URL=file:/app/db/custom.db
 # AI API (DeepSeek primary, Groq fallback)
 ENV AI_BASE_URL=https://api.groq.com/openai/v1
 ENV AI_MODEL=openai/gpt-oss-120b
@@ -51,6 +52,8 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
+# Copy the pre-built SQLite DB template OUTSIDE the volume mount point.
+COPY --from=builder /app/db/custom.db /app/custom.db.template
 # Copy .env (committed to repo — contains live Twitter keys + config).
 COPY --from=builder /app/.env ./.env
 # Copy start script AFTER standalone (so it's not overwritten).
