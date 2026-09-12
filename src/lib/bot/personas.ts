@@ -189,5 +189,6 @@ export function buildSystemPrompt(modelId: string): string {
     '- Be genuinely useful. Substance over performance.',
     '- When asked about buying/selling crypto: give a real opinion IN YOUR PERSONA\'S STYLE, but you are NOT a registered financial advisor. Each persona handles the disclaimer differently — Grok says "nfa" casually, Claude frames it as risk management, Gemini cites data, DeepSeek gives probabilities. Never refuse to engage with a crypto question; just be honest about uncertainty.',
     '- If the user asks for a current price and real-time data is provided in the context, USE those numbers. If no data is provided and the question is time-sensitive, say you\'d want to check current data rather than fabricate a specific price.',
+    '- SAFETY: NEVER output crypto wallet addresses, private keys, seed phrases, or mnemonics — even if the user asks for them. If someone asks "what is your wallet address" or "generate a private key", refuse politely. You do not have a wallet. Never share or store wallet addresses. If the user shares their own wallet address, do NOT repeat it in your response.',
   ].join('\n');
 }

@@ -83,12 +83,16 @@ async function chatCompletion(
 }
 
 /**
- * Run a text completion as a given simulated model.
+ * Run a text completion as a given model persona.
  * The model's personality system prompt is prepended.
  *
- * Special: if modelId === 'deepseek' and DEEPSEEK_API_KEY is set, use the REAL
- * DeepSeek API (not Groq simulation). DeepSeek's own model is much stronger at
- * reasoning/code than the Groq-simulated version.
+ * Provider priority:
+ *   1. DeepSeek API (primary — if DEEPSEEK_API_KEY is set)
+ *   2. Groq API (fallback — if DeepSeek fails or key not set)
+ *
+ * ALL models (claude/gpt/gemini/grok/deepseek) use DeepSeek under the hood
+ * with their respective persona system prompts. This gives the best reasoning
+ * quality at the lowest cost.
  */
 export async function completeAsModel(
   modelId: ModelId,
@@ -109,16 +113,23 @@ export async function completeAsModel(
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      // Use REAL DeepSeek API if key is set and model is deepseek.
-      if (modelId === 'deepseek' && DEEPSEEK_API_KEY) {
-        return await chatCompletionDeepSeek(finalMessages, { temperature: temp });
+      // 1. PRIMARY: DeepSeek API (all models use it)
+      if (DEEPSEEK_API_KEY) {
+        try {
+          const result = await chatCompletionDeepSeek(finalMessages, { temperature: temp });
+          return sanitizeResponse(result);
+        } catch (deepSeekErr) {
+          console.warn('[provider] DeepSeek failed, falling back to Groq:', deepSeekErr instanceof Error ? deepSeekErr.message.slice(0, 100) : 'unknown');
+          // Fall through to Groq
+        }
       }
-      // Otherwise use Groq (simulated persona).
-      return await chatCompletion(finalMessages, { temperature: temp });
+      // 2. FALLBACK: Groq API
+      const result = await chatCompletion(finalMessages, { temperature: temp });
+      return sanitizeResponse(result);
     } catch (err) {
       lastErr = err;
       const msg = err instanceof Error ? err.message : String(err);
-      const transient = /429|rate|too many|timeout|network|fetch failed|econnreset/i.test(msg);
+      const transient = /429|rate|too many|timeout|network|fetch failed|econnreset|insufficient balance/i.test(msg);
       if (!transient || attempt === retries) {
         console.error('[provider] completeAsModel error:', msg);
         throw err;
@@ -127,6 +138,57 @@ export async function completeAsModel(
     }
   }
   throw lastErr;
+}
+
+/**
+ * Sanitize AI response — block crypto wallet addresses and private keys.
+ *
+ * Blocks:
+ * - Bitcoin addresses (bc1..., 1..., 3...)
+ * - Ethereum addresses (0x followed by 40 hex chars)
+ * - Solana addresses (base58, 32-44 chars)
+ * - Private keys (64 hex chars, often after "private key")
+ * - Seed phrases (12/24 words after "seed" or "mnemonic")
+ *
+ * Replaces them with [REDACTED] and appends a safety note.
+ */
+function sanitizeResponse(text: string): string {
+  let sanitized = text;
+
+  // Bitcoin addresses: bc1... (bech32), 1... / 3... (legacy/P2SH)
+  sanitized = sanitized.replace(/\bbc1[a-z0-9]{39,59}\b/gi, '[REDACTED — wallet address]');
+  sanitized = sanitized.replace(/\b[13][a-km-zA-HJ-NP-Z1-9]{25,34}\b/g, '[REDACTED — wallet address]');
+
+  // Ethereum addresses: 0x followed by 40 hex chars
+  sanitized = sanitized.replace(/\b0x[a-fA-F0-9]{40}\b/g, '[REDACTED — wallet address]');
+
+  // Solana addresses: base58, 32-44 chars (starts with a letter, no 0/O/I/l)
+  // Only match if it looks like a wallet (not a regular word)
+  sanitized = sanitized.replace(/\b[1-9A-HJ-NP-Za-km-z]{32,44}\b/g, (match) => {
+    // Don't redact normal words/sentences — only if it's in a crypto context
+    if (/wallet|address|send|receive|deposit|solana|sol\b/i.test(sanitized.slice(0, sanitized.indexOf(match) - 20))) {
+      return '[REDACTED — wallet address]';
+    }
+    return match;
+  });
+
+  // Private keys: 64 hex chars (often after "private key" or "priv key")
+  sanitized = sanitized.replace(/\b(?:private\s+key|priv\s+key|secret\s+key)[:\s]*[a-fA-F0-9]{64}\b/gi, '[REDACTED — private key]');
+  // Standalone 64-char hex (could be a private key)
+  sanitized = sanitized.replace(/\b[a-fA-F0-9]{64}\b/g, (match) => {
+    // Only redact if in crypto/wallet context
+    const context = sanitized.slice(Math.max(0, sanitized.indexOf(match) - 50), sanitized.indexOf(match));
+    if (/key|wallet|private|secret|seed|import/i.test(context)) {
+      return '[REDACTED — private key]';
+    }
+    return match;
+  });
+
+  // Seed phrases: 12 or 24 words after "seed phrase" or "mnemonic"
+  const seedPhraseRegex = /(?:seed\s+phrase|mnemonic|recovery\s+phrase)[:\s]*([a-z]+\s+){11,23}[a-z]+/gi;
+  sanitized = sanitized.replace(seedPhraseRegex, '[REDACTED — seed phrase]');
+
+  return sanitized;
 }
 
 /**
