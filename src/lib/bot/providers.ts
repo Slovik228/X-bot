@@ -20,6 +20,13 @@ const AI_BASE_URL = process.env.AI_BASE_URL || 'https://api.groq.com/openai/v1';
 const AI_MODEL = process.env.AI_MODEL || 'llama-3.3-70b-versatile';
 const AI_VISION_MODEL = process.env.AI_VISION_MODEL || 'llama-3.2-90b-vision-preview';
 
+// ---- DeepSeek API config (real DeepSeek model, not simulated) ----
+// Get a key at https://platform.deepseek.com/ — pay-as-you-go, very cheap.
+// Set DEEPSEEK_API_KEY in Fly secrets. If not set, /deepseek falls back to Groq.
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
+const DEEPSEEK_BASE_URL = process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1';
+const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+
 // ---- fal.ai config (image generation) ----
 // Get a FREE key at https://fal.ai/dashboard/keys — gives $1 free credits (~200 images).
 // Set FAL_KEY in Fly secrets.
@@ -78,6 +85,10 @@ async function chatCompletion(
 /**
  * Run a text completion as a given simulated model.
  * The model's personality system prompt is prepended.
+ *
+ * Special: if modelId === 'deepseek' and DEEPSEEK_API_KEY is set, use the REAL
+ * DeepSeek API (not Groq simulation). DeepSeek's own model is much stronger at
+ * reasoning/code than the Groq-simulated version.
  */
 export async function completeAsModel(
   modelId: ModelId,
@@ -98,6 +109,11 @@ export async function completeAsModel(
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
+      // Use REAL DeepSeek API if key is set and model is deepseek.
+      if (modelId === 'deepseek' && DEEPSEEK_API_KEY) {
+        return await chatCompletionDeepSeek(finalMessages, { temperature: temp });
+      }
+      // Otherwise use Groq (simulated persona).
       return await chatCompletion(finalMessages, { temperature: temp });
     } catch (err) {
       lastErr = err;
@@ -111,6 +127,48 @@ export async function completeAsModel(
     }
   }
   throw lastErr;
+}
+
+/**
+ * Call the real DeepSeek API (api.deepseek.com).
+ * DeepSeek is OpenAI-compatible — same request/response format.
+ */
+async function chatCompletionDeepSeek(
+  messages: ChatMsg[],
+  opts: { temperature?: number; maxTokens?: number } = {},
+): Promise<string> {
+  if (!DEEPSEEK_API_KEY) {
+    throw new Error('DEEPSEEK_API_KEY not set');
+  }
+
+  const body: Record<string, unknown> = {
+    model: DEEPSEEK_MODEL,
+    messages: messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    })),
+    temperature: opts.temperature ?? 0.3,
+    max_tokens: opts.maxTokens ?? 1024,
+    stream: false,
+  };
+
+  const res = await fetch(`${DEEPSEEK_BASE_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`DeepSeek API error ${res.status}: ${errText.slice(0, 200)}`);
+  }
+
+  const data = await res.json();
+  const content = data?.choices?.[0]?.message?.content;
+  return (content || '').trim();
 }
 
 function personaTemperature(modelId: ModelId): number {
